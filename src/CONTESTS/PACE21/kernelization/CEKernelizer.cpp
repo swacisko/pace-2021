@@ -1756,6 +1756,7 @@ void CEKernelizer::fullKernelization(bool use_heuristic_rules, int additional_ra
 
     bool changes = true;
     while( changes  ){
+        if(Global::checkTle()) break;
 
         changes = false;
 //        for(int i=0; i<N; i++) assert( helper1[i] == false );

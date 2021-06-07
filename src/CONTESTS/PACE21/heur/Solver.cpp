@@ -1009,7 +1009,10 @@ bool Solver::smallIteration(int iter_cnt, int nonneg_iter_cnt) {
 
                     if (!Global::disable_all_logs) clog << "  After SwpCndNode, result: " << neg->best_result << endl;
 
-                    if(Global::checkTle()) return false;
+                    if(Global::checkTle()){
+                        delete neg;
+                        return false;
+                    }
 
                     if (!Global::CONTEST_MODE) {
                         assert(PaceUtils::evaluateState(*st) == neg->best_result);

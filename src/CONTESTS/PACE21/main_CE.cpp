@@ -191,7 +191,7 @@ void main_CE(){
         cnf.neg_use_edge_repulsion = true; // using edge repulsion
 
         cnf.neg_max_best_cl_size_triangle_swaps = 2; // #TEST original 2
-        cnf.neg_use_triangle_swaps_to_other_clusters = true;
+        cnf.neg_use_triangle_swaps_to_other_clusters = false;
     }
 
     { // setting granularity and maximal recursion depth
@@ -350,6 +350,9 @@ void main_CE(){
 
         int cnt = 0;
         while( !Global::checkTle() ) {
+            if( (cnt % 3) == 2 ) cnf.neg_use_triangle_swaps_to_other_clusters = true;
+            else cnf.neg_use_triangle_swaps_to_other_clusters = false;
+
             Solver solver(V, init_part, cnf);
 
             if(use_run_fast){
@@ -413,7 +416,7 @@ void main_CE(){
             }*/
 
 
-            if(cnt++ == 20) break;
+            if(cnt++ == 24) break;
         }
 
 //        bool write_mods = Global::CONTEST_MODE;
