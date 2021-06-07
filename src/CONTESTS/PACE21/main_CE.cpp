@@ -348,6 +348,7 @@ void main_CE(){
 
         bool switcher = false;
 
+        int cnt = 0;
         while( !Global::checkTle() ) {
             Solver solver(V, init_part, cnf);
 
@@ -363,7 +364,7 @@ void main_CE(){
                 auto [ part_oV, part_clg ] = solver.localSearch();
                 solver.compareToBestSolutionAndUpdate(part_oV);
 
-//                cnf.use_kernelization = !cnf.use_kernelization; // changing to use / not to use kernelization in next iteration
+                cnf.use_kernelization = !cnf.use_kernelization; // changing to use / not to use kernelization in next iteration
                 //#TEST - do not use kernelization
 
                 cnf.use_only_fast_exact_kernelization = old_cnf_use_only_fast_exact_kernelization;
@@ -410,6 +411,9 @@ void main_CE(){
                 cerr << endl << endl << endl << endl << "********************* NEXT MAIN ITERATION, current best: "
                      << best_result << endl << endl;
             }*/
+
+
+            if(cnt++ == 20) break;
         }
 
 //        bool write_mods = Global::CONTEST_MODE;
