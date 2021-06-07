@@ -249,7 +249,7 @@ void liftSolution(VVI & V){
 //        DEBUG(newV);
 
         auto mods = getEdgeMods(V, newV);
-        cout << mods.size() << endl;
+//        cout << mods.size() << endl;
         for(PII p : mods) cout << p.first+1 << " " << p.second+1 << endl;
 
         cerr << "mods.size(): " << mods.size() << endl;

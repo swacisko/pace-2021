@@ -31,22 +31,15 @@ namespace GraphReader{
         string s;
         VVI V;
 
-        int lineNumber = 1;
-
         int N,M;
         int edges_read = 0;
-
 
         while( true ){
             getline(cin,s,char(10));
 
-//            if( s[0] == 'p' ){
-//            if( s.Find("edge") != string::npos ){
-
             if( s[0] == 'c' ){
                 // nothing to do here, this is a comment
-            }else if( s[0] == 'p' && lineNumber++ == 1 ){
-//                s = s.substr( 4,s.size()-4 );
+            }else if( s[0] == 'p' ){
                 stringstream str(s);
                 string nothingBox;
                 str >> nothingBox >> nothingBox >> N >> M;
@@ -69,8 +62,9 @@ namespace GraphReader{
 
                 V[a].push_back(b);
                 V[b].push_back(a);
+
+                if( edges_read == M ) break;
             }
-            if( edges_read == M ) break;
         }
 
         for( int i=0; i<N; i++ ){
