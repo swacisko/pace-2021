@@ -82,6 +82,8 @@ void NEG::shuffleClg(){
 void NEG::improve() {
     const bool debug = false;
 
+    if(Global::checkTle()) return;
+
     VI v; localShuffle(v);
 
     auto debug_all = [&](){
