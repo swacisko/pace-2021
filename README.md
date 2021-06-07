@@ -5,6 +5,9 @@
 A variety of heuristics are used to find a small cluster editing set of given graph.<br>
 The main algorithm works in iterations, in each iteration a new cluster editing set is found (iterations are independent from each other, the longer the solver runs, the more iterations are done and the greater chance of finding a good set).<br>
 
+The **main** branch contains code of CluES submitted to **heuristic track**.<br>
+The version of CluES submitted to exact track can be found on **'exact_track'** branch.<br>
+The version of CluES submitted to kernelization track can be found on **'kernelization_track'** branch.
 
 <br>
 
