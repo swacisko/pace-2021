@@ -7,6 +7,7 @@
 #include <CONTESTS/PACE21/heur/StateImprovers/SparseGraphTrimmer.h>
 #include <CONTESTS/PACE21/test_graphs.h>
 #include <CONTESTS/PACE21/heur/StateImprovers/NodeEdgeGreedyW1.h>
+#include <graphs/components/ConnectedComponents.h>
 #include "CONTESTS/PACE21/main_CE.h"
 
 void kernelizationCompare(){
@@ -191,7 +192,7 @@ void main_CE(){
         cnf.neg_use_edge_repulsion = true; // using edge repulsion
 
         cnf.neg_max_best_cl_size_triangle_swaps = 2; // #TEST original 2
-        cnf.neg_use_triangle_swaps_to_other_clusters = true;
+        cnf.neg_use_triangle_swaps_to_other_clusters = false;
     }
 
     { // setting granularity and maximal recursion depth
@@ -319,12 +320,12 @@ void main_CE(){
 
                 neg->move_frequency = 2;
 
-                neg->use_node_interchanging = true;     neg->node_interchanging_frequency = 20;
-                neg->use_join_clusters = true;          neg->join_clusters_frequency = 20;
-                neg->use_chain2_swaps = true;           neg->chain2_swaps_frequency = 20;
+                neg->use_node_interchanging = false;     neg->node_interchanging_frequency = 10;
+                neg->use_join_clusters = false;          neg->join_clusters_frequency = 30;
+                neg->use_chain2_swaps = false;           neg->chain2_swaps_frequency = 30;
                 neg->use_queue_propagation = false;
 
-                neg->use_triangle_swaps = true;         neg->triangle_swaps_frequency = 30;
+                neg->use_triangle_swaps = true;         neg->triangle_swaps_frequency = 7;
                 neg->use_edge_swaps = true;             neg->edge_swaps_frequency = 5;
                 neg->use_node_swaps = true; // #TEST
 
@@ -342,9 +343,9 @@ void main_CE(){
         double avg_deg = 2.0 * E / V.size();
 
         bool use_run_fast = true;
-        if(avg_deg < 4) use_run_fast = false;
+//        if(avg_deg < 4) use_run_fast = false;
 
-        VPII best_mods; int best_result = 1e9;
+        VVI results;
 
         bool switcher = false;
 
@@ -354,7 +355,7 @@ void main_CE(){
 
             if(use_run_fast){
                 int old_cnf_use_only_fast_exact_kernelization = cnf.use_only_fast_exact_kernelization;
-                if( cnf.use_kernelization && E < 50'000 ){
+                if( cnf.use_kernelization && E < 300'000 ){
                     if(switcher) cnf.use_only_fast_exact_kernelization = false;
                     else cnf.use_only_fast_exact_kernelization = true;
                     switcher = !switcher;
@@ -365,65 +366,296 @@ void main_CE(){
                 solver.compareToBestSolutionAndUpdate(part_oV);
 
                 cnf.use_kernelization = !cnf.use_kernelization; // changing to use / not to use kernelization in next iteration
-                //#TEST - do not use kernelization
 
                 cnf.use_only_fast_exact_kernelization = old_cnf_use_only_fast_exact_kernelization;
             }
-            else{
-//                solver.run_recursive(); // original
-                ClusterGraph clg(&V,init_part);
-                State st(clg, RANDOM_MATCHING);
-                NEG* neg = new NodeEdgeGreedyW1(st);
-                neg->setConfigurations(cnf);
 
-                neg->perturb_mode = 0; // cluster joining instead of splitting
-                neg->allow_perturbations = true;
-                neg->do_not_perturb_if_improved = false;
-
-                {
-                    // #TEST
-                    neg->prefer_cluster_mode = 1; // prefer moving to smaller clusters
-                }
-
-                neg->improve();
-
-                { // CAUTION - setting values to unused solver
-                    solver.best_result = neg->best_result;
-                    solver.best_partition = neg->best_partition;
-                }
-
-                delete neg;
-            }
-
-            if( solver.best_result < best_result ){
-                best_result = solver.best_result;
-                best_mods = solver.getModifications();
-            }
-
-            if(!Global::disable_all_logs){
-                clog << "Creators: (calls,improvements):" << endl;
-                for( auto & [s,p] : solver.local_search_creator_calls ){
-                    clog << s << " --> " << p << endl;
-                }
-                clog << endl << endl << endl << endl << "********************* NEXT MAIN ITERATION, current best: "
-                                               << best_result << endl << endl;
-            }/*else{
-                cerr << endl << endl << endl << endl << "********************* NEXT MAIN ITERATION, current best: "
-                     << best_result << endl << endl;
-            }*/
-
+            results.push_back( solver.best_partition );
 
             if(cnt++ == 20) break;
         }
 
-//        bool write_mods = Global::CONTEST_MODE;
-        bool write_mods = true; // #TEST
+
+        bool write_mods = true;
         if (write_mods) {
-            VPII mods = best_mods;
-            for (auto e : mods) cout << e.first+1 << " " << e.second+1 << endl;
+            VPII edges_to_remove;
+            VPII edges = GraphUtils::getGraphEdges(V);
+            {
+                for (auto &[a, b] : edges) {
+                    bool always_different_clusters = true;
+                    for (int i = 0; i < results.size(); i++) {
+                        if (results[i][a] == results[i][b]) {
+                            always_different_clusters = false;
+                            break;
+                        }
+                    }
+                    if (always_different_clusters) edges_to_remove.push_back({a, b});
+                }
+            }
+            for( auto & [a,b] : edges_to_remove ) if(a>b) swap(a,b);
+
+            VPII edges_to_insert;
+            {
+                Solver solver(V, init_part, cnf);
+                solver.known_solutions = results;
+                cnf.coarsen_mode = contract_all;
+                solver.granulateSolution();
+                VI part = solver.partition;
+                set<PII> isEdge(ALL(edges));
+
+                VVI clusters = PaceUtils::partitionToClusters(part);
+                for( int i=0; i<clusters.size(); i++ ){
+                    for( int j=0; j<clusters[i].size(); j++ ){
+                        int a = clusters[i][j];
+                        for( int k=j+1; k<clusters[i].size(); k++ ){
+                            int b = clusters[i][k];
+                            if( isEdge.count( {a,b} ) == 0 ) edges_to_insert.push_back( {a,b} );
+                        }
+                    }
+                }
+            }
+            for( auto & [a,b] : edges_to_insert ) if(a>b) swap(a,b);
+
+
+            cerr << "There are " << edges_to_remove.size() << " edges removed and " << edges_to_insert.size()
+                 << " edges added" << endl;
+
+            VVI resV = V;
+            GraphUtils::removeEdges(resV, edges_to_remove);
+            for( auto & [a,b] : edges_to_insert) GraphUtils::addEdge(resV,a,b,false);
+
+
+            VI to_induce;
+            VVI components = ConnectedComponents::getConnectedComponents(resV);
+            VVI additional_clusters;
+
+            for( VI & comp : components ){
+                bool isCluster = true;
+                for( int d : comp ) if( resV[d].size() != (comp.size()-1) ) isCluster = false;
+                if(isCluster){
+                    additional_clusters.push_back(comp);
+                }
+                else to_induce += comp;
+            }
+
+            InducedGraph indResV = GraphInducer::induce(resV,to_induce);
+
+            /**
+             * returns a vector of pairs denoting edge modifications needed to transform V into G (or vice versa)
+             */
+            auto getEdgeMods = []( VVI & V, VVI G ){
+                VPII edgesV = GraphUtils::getGraphEdges(V);
+                VPII edgesG = GraphUtils::getGraphEdges(G);
+                set<PII> eV(ALL(edgesV)), eG(ALL(edgesG));
+                VPII res;
+                for( PII p : edgesV ) if( eG.count(p) == 0 ) res.push_back(p);
+                for( PII p : edgesG ) if( eV.count(p) == 0 ) res.push_back(p);
+                return res;
+            };
+
+
+            bool write_auxiliary = false;
+            VI mapper = indResV.nodes;
+
+            if(write_auxiliary){
+                cout << "c mapper " << indResV.nodes.size(); // writing mapper to remap ids.
+                for(int i=0; i<mapper.size(); i++) cout << " " << mapper[i];
+                cout << endl;
+
+                cout << "c additional_clusters " << additional_clusters.size() << endl; // writing additional_clusters, not mapped
+                for( auto & cl : additional_clusters ){
+                    cout << "c " << cl.size();
+                    for( int d : cl ) cout << " " << d;
+                    cout << endl;
+                }
+            }
+
+            resV = indResV.V;
+
+            auto transformToG = [&]( VVI & newV ){
+                VVI res(V.size());
+                for( int i=0; i<newV.size(); i++ ){
+                    for( int d : newV[i] ){
+                        res[ mapper[i] ].push_back( mapper[d] );
+                    }
+                }
+                return res;
+            };
+
+            auto liftSolution = [&]( VVI newV ){
+                newV = transformToG(newV);
+                for( int i=0; i<additional_clusters.size(); i++ ){
+                    for( int a : additional_clusters[i] ){
+                        for( int b : additional_clusters[i] ){
+                            if(a==b) continue;
+                            newV[a].push_back(b);
+                        }
+                    }
+                }
+                return newV;
+            };
+
+            int modifications_done;
+            {
+                VVI tempV = transformToG(resV);
+                for (int i = 0; i < additional_clusters.size(); i++) {
+                    for (int a : additional_clusters[i]) {
+                        for (int b : additional_clusters[i]) {
+                            if (a == b) continue;
+                            tempV[a].push_back(b);
+                        }
+                    }
+                }
+                VPII temp_mods = getEdgeMods(V, tempV);
+                modifications_done = temp_mods.size();
+            }
+
+            cout << modifications_done << endl;
+            int resN = resV.size(), resE = GraphUtils::countEdges(resV);
+            cout << "p cep " << resN << " " << resE << endl;
+            for( int i=0; i<resN; i++ ){
+                for( int p : resV[i] ){
+                    if( p > i ) cout << i+1 << " " << p+1 << endl;
+                }
+            }
+
+            int N = resV.size();
+
+            auto heur1 = [&](){
+                VVI newV(resV.size());
+
+//                newV = transformToG(newV);
+//                for( int i=0; i<additional_clusters.size(); i++ ){
+//                    for( int a : additional_clusters[i] ){
+//                        for( int b : additional_clusters[i] ){
+//                            if(a==b) continue;
+//                            newV[a].push_back(b);
+//                        }
+//                    }
+//                }
+                newV = liftSolution(newV);
+
+                auto mods = getEdgeMods(V, newV);
+                cout << mods.size() << endl;
+                for(PII p : mods) cout << p.first+1 << " " << p.second+1 << endl;
+            };
+
+            auto heur2 = [&](){
+                VVI newV(resV.size());
+                for( int i=0; i<newV.size(); i++ ){
+                    for( int k=0; k<newV.size(); k++ ){
+                        if(i != k) newV[i].push_back(k);
+                    }
+                }
+
+//                newV = transformToG(newV);
+//                for( int i=0; i<additional_clusters.size(); i++ ){
+//                    for( int a : additional_clusters[i] ){
+//                        for( int b : additional_clusters[i] ){
+//                            if(a==b) continue;
+//                            newV[a].push_back(b);
+//                        }
+//                    }
+//                }
+                newV = liftSolution(newV);
+
+                auto mods = getEdgeMods(V, newV);
+                cout << mods.size() << endl;
+                for(PII p : mods) cout << p.first+1 << " " << p.second+1 << endl;
+            };
+
+            auto heur3 = [&](){
+                VB was(N,false);
+                VVI clusters;
+                for( int i=0; i<N; i++ ){
+                    if( was[i] ) continue;
+                    was[i] = true;
+                    clusters.push_back({});
+                    clusters.back().push_back(i);
+
+                    for( int d : resV[i] ){
+                        if( was[d] ) continue;
+                        was[d] = true;
+                        clusters.back().push_back(d);
+                    }
+                }
+
+                VVI newV(N);
+                for( int i=0; i<clusters.size(); i++ ){
+                    for( int a : clusters[i] ){
+                        for( int b : clusters[i] ){
+                            if(a==b) continue;
+                            newV[a].push_back(b);
+                        }
+                    }
+                }
+
+//                newV = transformToG(newV);
+//                for( int i=0; i<additional_clusters.size(); i++ ){
+//                    for( int a : additional_clusters[i] ){
+//                        for( int b : additional_clusters[i] ){
+//                            if(a==b) continue;
+//                            newV[a].push_back(b);
+//                        }
+//                    }
+//                }
+                newV = liftSolution(newV);
+
+                auto mods = getEdgeMods(V, newV);
+                cout << mods.size() << endl;
+                for(PII p : mods) cout << p.first+1 << " " << p.second+1 << endl;
+            };
+
+            auto heur4 = [&](){
+                VB was(N,false);
+                VVI clusters;
+                for( int i=N-1; i>=0; i-- ){
+                    if( was[i] ) continue;
+                    was[i] = true;
+                    clusters.push_back({});
+                    clusters.back().push_back(i);
+
+                    for( int d : resV[i] ){
+                        if( was[d] ) continue;
+                        was[d] = true;
+                        clusters.back().push_back(d);
+                    }
+                }
+
+                VVI newV(N);
+                for( int i=0; i<clusters.size(); i++ ){
+                    for( int a : clusters[i] ){
+                        for( int b : clusters[i] ){
+                            if(a==b) continue;
+                            newV[a].push_back(b);
+                        }
+                    }
+                }
+
+//                newV = transformToG(newV);
+//                for( int i=0; i<additional_clusters.size(); i++ ){
+//                    for( int a : additional_clusters[i] ){
+//                        for( int b : additional_clusters[i] ){
+//                            if(a==b) continue;
+//                            newV[a].push_back(b);
+//                        }
+//                    }
+//                }
+                newV = liftSolution(newV);
+
+                auto mods = getEdgeMods(V, newV);
+                cout << mods.size() << endl;
+                for(PII p : mods) cout << p.first+1 << " " << p.second+1 << endl;
+            };
+
+            heur1();
+            heur2();
+            heur3();
+            heur4();
+
+            cerr << "value of d: " << modifications_done << endl;
         }
 
-        cerr << "Final result: " << best_result << endl;
         cerr << "Total real time: " << Global::secondsFromStart() << endl;
     }
 
