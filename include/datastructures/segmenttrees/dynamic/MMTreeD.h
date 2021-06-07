@@ -1,0 +1,8 @@
+//
+// Created by sylwester on 1/9/21.
+//
+
+#ifndef ALGORITHMSPROJECT_MMTREED_H
+#define ALGORITHMSPROJECT_MMTREED_H
+
+#endif //ALGORITHMSPROJECT_MMTREED_H
