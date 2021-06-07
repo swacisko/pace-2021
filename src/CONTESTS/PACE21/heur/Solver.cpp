@@ -1009,7 +1009,10 @@ bool Solver::smallIteration(int iter_cnt, int nonneg_iter_cnt) {
 
                     if (!Global::disable_all_logs) clog << "  After SwpCndNode, result: " << neg->best_result << endl;
 
-                    if(Global::checkTle()) return false;
+                    if(Global::checkTle()){
+                        delete neg;
+                        return false;
+                    }
 
                     if (!Global::CONTEST_MODE) {
                         assert(PaceUtils::evaluateState(*st) == neg->best_result);
@@ -1073,8 +1076,11 @@ bool Solver::smallIteration(int iter_cnt, int nonneg_iter_cnt) {
                 cr.keep_only_nonpositive_candidates = cnf->keep_only_nonpositive_candidates; // #TEST - commented to allow more induced orders
 
                 auto [orders, res] = cr.createSwapCandidates();
-                if( Global::checkTle() ) return false; // not clearing orders, possible memory leak
                 rep_orders += orders;
+                if( Global::checkTle() ){
+                    clearOrdersAndCandidates();
+                    return false;
+                }
 
                 bool negative = false;
                 for( auto & cnd : res ){
@@ -1102,7 +1108,10 @@ bool Solver::smallIteration(int iter_cnt, int nonneg_iter_cnt) {
                     }
                 }
 
-                if( Global::checkTle() ) return false; // not clearing rep_orders, possible memory leak
+                if( Global::checkTle() ){
+                    clearOrdersAndCandidates();
+                    return false;
+                }
 
                 if(negative){
                     local_search_creator_calls["SwpCndEORep"].second++;
@@ -1122,8 +1131,11 @@ bool Solver::smallIteration(int iter_cnt, int nonneg_iter_cnt) {
                 cr.keep_only_nonpositive_candidates = cnf->keep_only_nonpositive_candidates;  // #TEST - commented to allow more induced orders
 
                 auto [orders, res] = cr.createSwapCandidates();
-                if( Global::checkTle() ) return false;
                 attr_orders += orders;
+                if( Global::checkTle() ){
+                    clearOrdersAndCandidates();
+                    return false; // not clearing rep_orders, possible memory leak
+                }
 
                 bool negative = false;
                 for( auto & cnd : res ){
@@ -1153,7 +1165,10 @@ bool Solver::smallIteration(int iter_cnt, int nonneg_iter_cnt) {
                     }
                 }
 
-                if( Global::checkTle() ) return false; // not clearing attr_orders, possible memory leak
+                if( Global::checkTle() ){
+                    clearOrdersAndCandidates();
+                    return false; // not clearing rep_orders, possible memory leak
+                }
 
                 if(negative){
                     local_search_creator_calls["SwpCndEOAttr"].second++;

@@ -228,6 +228,7 @@ vector<ExpansionOrder> SwpCndEOCreator::createExpansionOrders( function<VVI(Clus
         ComponentExpansion ce( cl );
 
         for( auto & A : sets ){
+            if(Global::checkTle()) return orders;
 
 //            int cnt = 0; // original version
             int cnt = rnd.nextInt(5); // #TEST - checking different expansion orders cmp rules
