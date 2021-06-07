@@ -26,6 +26,6 @@
 
 void kernelizationCompare();
 
-void main_CE();
+void main_CE(int argc, char **argv);
 
 #endif //ALGORITHMSPROJECT_MAIN_CE_H

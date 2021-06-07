@@ -8,97 +8,269 @@
 #include <CONTESTS/PACE21/test_graphs.h>
 #include <CONTESTS/PACE21/heur/StateImprovers/NodeEdgeGreedyW1.h>
 #include <graphs/components/ConnectedComponents.h>
+#include <getopt.h>
 #include "CONTESTS/PACE21/main_CE.h"
 
-void kernelizationCompare(){
 
-//    ofstream clog_buf("input_kern_stats.txt", ios::out | ios::app);
-//    clog.rdbuf(clog_buf.rdbuf());
+const string kernelize = "kernelize";
+const string lift_solution = "lift-solution";
 
-    int A = 195;
-    int B = 197;
+string kernelization_phase = kernelize;
 
-    int cnt = 0;
+void initializeParams(int argc, char **argv) {
+    string phase = "phase";
 
-    VI ruleAppliedCnt(1000,0);
+    static struct option long_options[] = {
+            {phase.c_str(),      optional_argument, 0, 0},
+            {0,0,0,0}
+    };
 
-    for (int i = A; i <= B; i += 2) {
-        string id = "";
-        if (i < 100) id += "0";
-        if (i < 10) id += "0";
-        id += to_string(i);
+    while (optind < argc) {
+        int option_index = 0; int c;
+        string option, option_name;
 
-//        string inst = "exact";
-        string inst = "heur";
+        c = getopt_long(argc, argv, "", long_options, &option_index);
 
-        string file = inst + "/" + inst + id + ".gr";
+        switch (c) {
+            case 0: {
+                option = string(optarg);
+                option_name = string(long_options[option_index].name);
 
-        clog << "Processing file: " << file << endl;
-        ifstream istr(file);
-
-//        VVI V = GraphReader::readGraphDIMACSWunweighed(istr);
-        VVI V = GraphReader::readGraphDIMACSWunweighed(cin);
-
-        GraphUtils::writeBasicGraphStatistics(V);
-
-        const int ITERS = 0;
-
-        for(int iter=0; iter <= ITERS; iter++ ){
-
-            CEKernelizer kern(V,cnt++);
-
-            /* { // testing heur rule 6 and 7
-                 for(int t=0; t<kern.MAX_RULES; t++ ) kern.setDisableRule(t,true);
-                 for(int t=0; t<kern.MAX_HEUR_RULES; t++ ) kern.setDisableHeurRule(t,true);
-
-                 kern.setDisableRule(16,false); // correct almost clique rule
-                 kern.setDisableHeurRule(6,false);
-                 kern.setDisableHeurRule(7,false);
-
-                 kern.fullKernelization(false, 0);
-                 kern.improveKernelizationUsingHeuristicRules();
-                 continue;
-             }*/
-
-
-            kern.fullKernelization(false, 0);
-
-            { // some possible modifications
-//                kern.use_heuristic_rules_separately = true;
-//            kern.USE_HEUR_RULE_3_WITHOUT_STRICT_SIZE_CONDITION = true;
-            }
-
-            kern.improveKernelizationUsingHeuristicRules();
-
-            ENDL(3);
-
-            { // gathering info about kernelizations used and times used
-                VPII apps;
-                for( int i=1; i<ruleAppliedCnt.size(); i++ ){
-                    if( i < kern.ruleAppliedCnt.size() && kern.ruleAppliedCnt[i] > 0 )
-                        apps.push_back( {i, kern.ruleAppliedCnt[i]} );
+                if (option_name == phase) {
+                    string temp = string(optarg);
+                    if(temp == lift_solution) kernelization_phase = lift_solution;
+                    else if( temp != kernelize ){
+                        cerr << "No such option as " << temp << " provided by parameter --" << option_name << endl;
+                        cerr << "Proceeding to kernelization phase (by default)" << endl;
+                    }
                 }
-
-                for( auto [a,b] : apps ) ruleAppliedCnt[a] += b;
+                break;
             }
-
-        }
-
-        ENDL(7);
-    }
-
-    {
-        for( int i=0; i<ruleAppliedCnt.size(); i++ ){
-            if( ruleAppliedCnt[i] > 0 ){
-                clog << "Rule " << i << " was used " << ruleAppliedCnt[i] << endl;
+            default:{
+                option = string(optarg);
+                option_name = string(long_options[option_index].name);
             }
         }
     }
 }
 
-void main_CE(){
+void liftSolution(VVI & V){
+    VVI additional_clusters;
+    VI mapper;
+
+    auto getEdgeMods = []( VVI & V, VVI G ){
+        VPII edgesV = GraphUtils::getGraphEdges(V);
+        VPII edgesG = GraphUtils::getGraphEdges(G);
+        set<PII> eV(ALL(edgesV)), eG(ALL(edgesG));
+        VPII res;
+        for( PII p : edgesV ) if( eG.count(p) == 0 ) res.push_back(p);
+        for( PII p : edgesG ) if( eV.count(p) == 0 ) res.push_back(p);
+        return res;
+    };
+
+    auto transformToG = [&]( VVI & newV ){
+        VVI res(V.size());
+        for( int i=0; i<newV.size(); i++ ){
+            for( int d : newV[i] ){
+                res[ mapper[i] ].push_back( mapper[d] );
+            }
+        }
+        return res;
+    };
+
+    auto liftSolution = [&]( VVI newV ){
+//        clog << "Lifting solution! Before, newV: " << endl << newV << endl;
+        newV = transformToG(newV);
+//        clog << "After, newV: " << endl << newV << endl;
+        for( int i=0; i<additional_clusters.size(); i++ ){
+            for( int a : additional_clusters[i] ){
+                for( int b : additional_clusters[i] ){
+                    if(a==b) continue;
+                    newV[a].push_back(b);
+                }
+            }
+        }
+        return newV;
+    };
+
+    auto applyModifications = [&]( VVI & resV, VPII & mods ){
+        set<PII> edge_set;
+        auto edges = GraphUtils::getGraphEdges(resV);
+        for(PII p : edges){
+            edge_set.insert(p);
+            edge_set.insert({p.second, p.first});
+        }
+
+//        DEBUG(edge_set);
+
+        VPII to_add, to_remove;
+        for( PII p : mods ){
+            if( edge_set.count(p) > 0 ) to_remove.push_back(p);
+            else to_add.push_back(p);
+        }
+
+//        DEBUG(to_remove);
+//        DEBUG(to_add);
+
+        GraphUtils::removeEdges(resV, to_remove);
+        for(auto [a,b] : to_add) GraphUtils::addEdge(resV,a,b);
+    };
+
+    //***************************************************************
+
+    V = GraphReader::readGraphDIMACSWunweighed(cin);
+    VVI resV;
+    VPII modifications;
+
+    mapper = VI(V.size(),-1);
+
+    if (kernelization_phase == lift_solution) {
+        string s;
+        int edges_read = 0, lineNumber = 1;
+        int N,M;
+        int resN, resM;
+
+        int section = 0;
+        int section1_cnt = 0;
+
+        while (!cin.eof()) {
+            getline(cin, s);
+            if(cin.eof()) break;
+
+            if (s[0] == 'c') {
+                stringstream str(s);
+                if( s.size() >= string("c mapper").size() && s.substr( 2, 6 ) == "mapper" ) {
+                    char e;
+                    string temp = "";
+                    str >> e >> temp;
+                    int a, cnt = 0;
+
+                    str >> cnt;
+                    for(int i=0; i<cnt; i++) str >> mapper[i];
+
+//                    if(!Global::disable_all_logs)
+//                        DEBUG(mapper);
+
+                }else if( s.size() >= string("c additional_clusters").size() && s.substr( 2,19 ) == "additional_clusters" ){
+                    char e; string temp; int a;
+                    str >> e >> temp >> a;
+                    for(int i=0; i<a; i++){
+                        int b,x;
+                        cin >> e >> x;
+                        additional_clusters.push_back(VI());
+                        for( int j=0; j<x; j++ ){
+                            cin >> b;
+                            additional_clusters.back().push_back(b);
+                        }
+                    }
+                    cin.ignore();
+
+//                    if(!Global::disable_all_logs)
+//                        DEBUG(additional_clusters);
+                }
+
+            } else if (s[0] == 'p') {
+                if(section == 0){
+                    stringstream str(s);
+                    string nothingBox;
+                    str >> nothingBox >> nothingBox >> N >> M;
+                    V = VVI(N);
+                }else if(section == 1){
+                    stringstream str(s);
+                    string nothingBox;
+                    str >> nothingBox >> nothingBox >> resN >> resM;
+                    resV = VVI(resN);
+                }
+
+            } else if( s[0] == '#' ){
+                section++;
+//                if(!Global::disable_all_logs){
+//                    clog << "Changing section, now section: " << section << endl;
+//                    DEBUG(V);
+//                    ENDL(10);
+//                    DEBUG(resV);
+//                }
+            }
+            else {
+                if(section == 0) {
+                    stringstream str(s);
+                    int a, b; char e;
+
+                    str >> a >> b;
+                    edges_read++;
+
+                    a--; b--;
+
+                    V[a].push_back(b);
+                    V[b].push_back(a);
+                }else if(section == 1){
+                    stringstream str(s);
+                    int a, b; char e;
+
+                    if(section1_cnt == 0){
+                        str >> a; // reading number 'd' - this is useless in solution lifting
+//                        DEBUG(a);
+                        section1_cnt++;
+                        continue;
+                    }
+
+//                    DEBUG(s);
+                    str >> a >> b;
+                    edges_read++;
+
+//                    DEBUG2(a,b);
+
+                    a--; b--;
+
+//                    clog << "Adding edge " << a << " -> " << b << " to resV" << endl;
+
+                    resV[a].push_back(b);
+                    resV[b].push_back(a);
+                }else if(section == 2){
+//                    cerr << "Reading modifications" << endl;
+                    stringstream str(s);
+                    int a, b;
+                    str >> a >> b;
+                    a--; b--;
+                    modifications.push_back( {a,b} );
+                }
+            }
+        }
+
+//        if(!Global::disable_all_logs)
+//            DEBUG(modifications);
+
+
+        applyModifications(resV, modifications);
+//        cerr << "Graph after modifications: " << resV << endl;
+
+        auto newV = liftSolution(resV);
+
+//        DEBUG(newV);
+
+        auto mods = getEdgeMods(V, newV);
+        cout << mods.size() << endl;
+        for(PII p : mods) cout << p.first+1 << " " << p.second+1 << endl;
+
+        cerr << "mods.size(): " << mods.size() << endl;
+    }
+}
+
+void main_CE(int argc, char **argv){
     std::ios_base::sync_with_stdio(0);
     std::cin.tie(NULL);
+
+//    {
+//        auto edges = CE_test_graphs::cluster_graph_test2_edges;
+//        auto N = -1;
+//        for(PII p : edges) N = max(N, max(p.first+1, p.second+1) );
+//        cout << "p cep " << N << " " << edges.size() << endl;
+//        for(PII p : edges) cout << p.first+1 << " " << p.second+1 << endl;
+//        cerr << "Test written to file" << endl;
+//        exit(2);
+//    }
+
+    initializeParams(argc, argv);
 
     Global::startAlg();
 
@@ -117,7 +289,6 @@ void main_CE(){
     Global::increaseStack();
 
 //    kernelizationCompare();
-
 
     VVI V;
 
@@ -139,7 +310,15 @@ void main_CE(){
 //        ifstream istr( "exact/exact" + case_string + ".gr" );
 
         V = GraphReader::readGraphDIMACSWunweighed(istr);
-    }else V = GraphReader::readGraphDIMACSWunweighed(cin);
+    }else {
+
+        if( kernelization_phase == lift_solution ){
+            liftSolution(V);
+            return;
+        }else{
+            V = GraphReader::readGraphDIMACSWunweighed(cin);
+        }
+    }
 
 
     if(!Global::disable_all_logs) GraphUtils::writeBasicGraphStatistics(V);
@@ -454,7 +633,10 @@ void main_CE(){
             };
 
 
-            bool write_auxiliary = false;
+            bool write_heur_rule_results = false;
+
+            bool write_auxiliary = (kernelization_phase == kernelize);
+
             VI mapper = indResV.nodes;
 
             if(write_auxiliary){
@@ -648,10 +830,12 @@ void main_CE(){
                 for(PII p : mods) cout << p.first+1 << " " << p.second+1 << endl;
             };
 
-            heur1();
-            heur2();
-            heur3();
-            heur4();
+            if(write_heur_rule_results){
+                heur1();
+                heur2();
+                heur3();
+                heur4();
+            }
 
             cerr << "value of d: " << modifications_done << endl;
         }
