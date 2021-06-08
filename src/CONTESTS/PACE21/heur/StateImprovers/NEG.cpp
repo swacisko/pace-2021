@@ -304,7 +304,7 @@ void NEG::improve() {
         }
         // *********************************************************  end of queue
 
-        if(Global::checkTle()) return;
+        if(Global::checkTle()) break;
 
         if(!use_node_interchanging_in_inner_loop){ // using node interchanging in outer loop
             //*****************  NODE INTERCHANGING
@@ -339,7 +339,7 @@ void NEG::improve() {
             }
         }
 
-        if(Global::checkTle()) return;
+        if(Global::checkTle()) break;
 
         bool use_chain2_swaps_in_iteration =
                 use_chain2_swaps &&
@@ -387,7 +387,7 @@ void NEG::improve() {
             }
         }
 
-        if(Global::checkTle()) return;
+        if(Global::checkTle()) break;
 
         if(!Global::CONTEST_MODE) assert( compareCurrentResultWithBruteResult() ); // FIXME:remove
 
